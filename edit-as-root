@@ -1,0 +1,36 @@
+#!/usr/bin/env sh
+set -eu
+
+if [ "$#" -ne 1 ]; then
+  echo "Usage: $0 FILE"
+  exit 1
+fi
+
+TARGET="$1"
+TMP="/tmp/edit-as-root_$(basename "${TARGET}")_$(uuidgen)"
+touch "${TMP}"
+chmod 600 "${TMP}"
+
+mtime=$(sudo stat -c %Y "$TARGET")
+# shellcheck disable=SC2024
+sudo cat "$TARGET" > "$TMP"
+
+${EDITOR:?} "$TMP"
+
+if sudo [ ! -e "${TARGET}" ]; then
+  echo "Error: File has since been removed. Your work is saved at ${TMP}"
+  exit 1
+fi
+
+if [ ! "$mtime" -eq "$(sudo stat -c %Y "$TARGET")" ]; then
+  echo "Error: File has since been modified. Your work is saved at ${TMP}"
+  exit 1
+fi
+
+if sudo diff "${TMP}" "${TARGET}" > /dev/null; then
+  echo "File unchanged."
+else
+  sudo sh -c "cat \"$TMP\" > \"$TARGET\""
+fi
+
+rm "$TMP"
